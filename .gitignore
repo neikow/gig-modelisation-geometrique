@@ -9,5 +9,5 @@ cmake-build-debug
 datasets
 
 data
-data output
+output
 .vs

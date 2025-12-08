@@ -6,44 +6,90 @@
 #include "types/CICP_Types.h"
 #include "types/DataLoader.h"
 #include "types/VoxelGrid.h"
+#include "types/CloudPreprocessor.h"
 
-int main() {
-
-
-    /// Load Data
-
-    std::vector<PointVectorPair> denseCloud;
-    const std::string filename = "../../../data/pavin/scan000.csv";
-
-    DataLoader loader;
-
-    if (!loader.load(filename, denseCloud))
-    {
+int main(int argc, char **argv) {
+    if (argc < 3) {
+        std::cerr << "Usage: " << "main file_path output_dir" << std::endl;
         return -1;
     }
 
-    /// Estimation de normal (‡ modifier pour ajouter elbow method)
+    const std::string filename = argv[1];
+    std::string output_dir = argv[2];
 
-    const int k = 5;
+    std::cout << "Input file: " << filename << std::endl;
+    std::cout << "Output directory: " << output_dir << std::endl;
+
+    if (!output_dir.ends_with("/")) {
+        output_dir += "/";
+    }
+
+    /// Load Data
+    std::vector<PointVectorPair> sparseCloud;
+    std::vector<PointVectorPair> denseCloud;
+
+    DataLoader loader;
+
+    if (!loader.load(filename, denseCloud)) {
+        return -1;
+    }
+
+    /// Copie et pr√©traitement
+    CloudPreprocessor preprocessor;
+    // D√©cimation
+    constexpr double decimationFactor = 20; // √† ajuster
+    sparseCloud = preprocessor.decimate(denseCloud, decimationFactor);
+    std::cout << "Decimated cloud to " << sparseCloud.size() << " points." << std::endl;
+
+    constexpr double noiseStdDev = 0.5; // √† ajuster
+    sparseCloud = preprocessor.add_noise(sparseCloud, noiseStdDev);
+    std::cout << "Added Gaussian noise : `sd = " << noiseStdDev << "`." << std::endl;
+
+    constexpr double dX = 1.0;
+    constexpr double dY = -2.0;
+    constexpr double dZ = 0.5;
+    sparseCloud = preprocessor.translate(sparseCloud, dX, dY, dZ);
+    std::cout << "Translated cloud by (" << dX << ", " << dY << ", " << dZ << ")." << std::endl;
+
+    constexpr double angleX = 5.0 / 180 * boost::math::constants::pi<double>();
+    constexpr double angleY = -3.0 / 180 * boost::math::constants::pi<double>();
+    constexpr double angleZ = 10.0 / 180 * boost::math::constants::pi<double>();
+
+    sparseCloud = preprocessor.rotate(sparseCloud, angleX, angleY, angleZ);
+    std::cout << "Rotated cloud by (" << angleX << ", " << angleY << ", " << angleZ << ") degrees." << std::endl;
+
+    /// Estimation de normal (ÔøΩ modifier pour ajouter elbow method)
+
+    const int kDense = 5;
+    const int kSparse = 3;
 
     std::cout << "Computing normals using PCA..." << std::endl;
 
     CGAL::pca_estimate_normals<CGAL::Parallel_if_available_tag>(
         denseCloud,
-        k,
+        kDense,
         CGAL::parameters::point_map(CGAL::First_of_pair_property_map<PointVectorPair>())
         .normal_map(CGAL::Second_of_pair_property_map<PointVectorPair>())
-        );
+    );
+
+    CGAL::pca_estimate_normals<CGAL::Parallel_if_available_tag>(
+        sparseCloud,
+        kSparse,
+        CGAL::parameters::point_map(CGAL::First_of_pair_property_map<PointVectorPair>())
+        .normal_map(CGAL::Second_of_pair_property_map<PointVectorPair>())
+    );
 
     std::cout << "Computed " << denseCloud.size() << " normals." << std::endl;
-
+    std::cout << "Computed " << sparseCloud.size() << " normals." << std::endl;
 
     // Voxelization
-    double voxelSize = 0.5; // ‡ ajouter une mÈthode de calcul de taille de voxel
+    double voxelSize = 0.5; // ÔøΩ ajouter une mÔøΩthode de calcul de taille de voxel
     std::cout << "Voxelizing with size " << voxelSize << "..." << std::endl;
 
-    VoxelGrid vGrid(voxelSize);
-    vGrid.create(denseCloud);
+    VoxelGrid vGridDense(voxelSize);
+    VoxelGrid vGridSparse(voxelSize);
+    vGridDense.create(denseCloud);
+    vGridSparse.create(sparseCloud);
 
     // Debug
     /*if (!vGrid.grid.empty()) {
@@ -52,9 +98,10 @@ int main() {
         std::cout << "Voxel ID " << firstVoxelId << " contains " << count << " points." << std::endl;
     }*/
 
-    loader.export_cloud_with_normals("../../../data output/debug_cloud.ply", denseCloud);
-    loader.export_voxel_centers("../../../data output/debug_voxels.ply", vGrid);
-
+    loader.export_cloud_with_normals(output_dir + "debug_cloud_dense.ply", denseCloud);
+    loader.export_cloud_with_normals(output_dir + "debug_cloud_sparse.ply", sparseCloud);
+    loader.export_voxel_centers(output_dir + "debug_voxels_dense.ply", vGridDense);
+    loader.export_voxel_centers(output_dir + "debug_voxels_sparse.ply", vGridSparse);
 
     return 0;
 }
