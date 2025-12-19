@@ -7,6 +7,7 @@
 #include "types/DataLoader.h"
 #include "types/VoxelGrid.h"
 #include "types/CloudPreprocessor.h"
+#include "types/Clustering.h"
 
 int main(int argc, char **argv) {
     if (argc < 3) {
@@ -83,13 +84,19 @@ int main(int argc, char **argv) {
     std::cout << "Computed " << sparseCloud.size() << " normals." << std::endl;
 
     // Voxelization
-    double voxelSize = 0.5; // � ajouter une m�thode de calcul de taille de voxel
+    double voxelSize = 2; // � ajouter une m�thode de calcul de taille de voxel
     std::cout << "Voxelizing with size " << voxelSize << "..." << std::endl;
 
     VoxelGrid vGridDense(voxelSize);
     VoxelGrid vGridSparse(voxelSize);
     vGridDense.create(denseCloud);
     vGridSparse.create(sparseCloud);
+
+    Clustering clusteringDense(denseCloud, vGridDense);
+    Clustering clusteringSparse(sparseCloud, vGridSparse);
+
+    const auto elected_planes_per_voxel_dense = clusteringDense.extract_planes_per_voxel(voxelSize / 100, 20, 4);
+    const auto elected_planes_per_voxel_sparse = clusteringSparse.extract_planes_per_voxel(voxelSize / 100, 20, 4);
 
     // Debug
     /*if (!vGrid.grid.empty()) {
@@ -98,10 +105,36 @@ int main(int argc, char **argv) {
         std::cout << "Voxel ID " << firstVoxelId << " contains " << count << " points." << std::endl;
     }*/
 
+    std::vector<PointVectorPair> elected_planes_dense;
+    for (const auto &planes: elected_planes_per_voxel_dense | std::views::values) {
+        elected_planes_dense.insert(
+            elected_planes_dense.end(),
+            planes.begin(),
+            planes.end()
+        );
+    }
+
+    std::vector<PointVectorPair> elected_planes_sparse;
+    for (const auto &planes: elected_planes_per_voxel_sparse | std::views::values) {
+        elected_planes_sparse.insert(
+            elected_planes_sparse.end(),
+            planes.begin(),
+            planes.end()
+        );
+    }
+
     loader.export_cloud_with_normals(output_dir + "debug_cloud_dense.ply", denseCloud);
     loader.export_cloud_with_normals(output_dir + "debug_cloud_sparse.ply", sparseCloud);
     loader.export_voxel_centers(output_dir + "debug_voxels_dense.ply", vGridDense);
     loader.export_voxel_centers(output_dir + "debug_voxels_sparse.ply", vGridSparse);
+    loader.export_cloud_with_normals(
+        output_dir + "debug_elected_planes_dense.ply",
+        elected_planes_dense
+    );
+    loader.export_cloud_with_normals(
+        output_dir + "debug_elected_planes_sparse.ply",
+        elected_planes_sparse
+    );
 
     return 0;
 }
