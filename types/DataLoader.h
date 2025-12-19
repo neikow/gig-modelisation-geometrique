@@ -50,13 +50,13 @@ public:
         // PLY Header
         out << "ply\n";
         out << "format ascii 1.0\n";
-        out << "element vertex " << grid.grid.size() << "\n";
+        out << "element vertex " << grid.grid_indices.size() << "\n";
         out << "property float x\n";
         out << "property float y\n";
         out << "property float z\n";
         out << "end_header\n";
 
-        for (const auto &[key, indices]: grid.grid) {
+        for (const auto &[key, indices]: grid.grid_indices) {
             double cx = grid.min_x + (key.i + 0.5) * grid.voxel_size;
             double cy = grid.min_y + (key.j + 0.5) * grid.voxel_size;
             double cz = grid.min_z + (key.k + 0.5) * grid.voxel_size;
