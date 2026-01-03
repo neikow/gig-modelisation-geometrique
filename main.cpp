@@ -42,9 +42,9 @@ int main(int argc, char **argv) {
     sparseCloud = preprocessor.decimate(denseCloud, decimationFactor);
     std::cout << "Decimated cloud to " << sparseCloud.size() << " points." << std::endl;
 
-    constexpr double noiseStdDev = 0.5; // à ajuster
-    sparseCloud = preprocessor.add_noise(sparseCloud, noiseStdDev);
-    std::cout << "Added Gaussian noise : `sd = " << noiseStdDev << "`." << std::endl;
+    // constexpr double noiseStdDev = 0.5; // à ajuster
+    // sparseCloud = preprocessor.add_noise(sparseCloud, noiseStdDev);
+    // std::cout << "Added Gaussian noise : `sd = " << noiseStdDev << "`." << std::endl;
 
     constexpr double dX = 1.0;
     constexpr double dY = -2.0;
