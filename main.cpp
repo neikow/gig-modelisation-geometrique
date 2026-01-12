@@ -1,139 +1,84 @@
 #include <iostream>
-#include <fstream>
-#include <CGAL/IO/read_points.h>
-#include <CGAL/pca_estimate_normals.h>
-// created types
-#include "types/CICP_Types.h"
-#include "types/DataLoader.h"
-#include "types/VoxelGrid.h"
-#include "types/CloudPreprocessor.h"
-#include "types/Clustering.h"
+#include <string>
+#include "types/CICP.h"
+#include "types/Visualizer.h"
+
+// Constants
+double VOXEL_SIZE = 0.08;
+int REGISTRATION_MAX_ITERATIONS = 100;
+int K_NEIGHBORS = 10;
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
-        std::cerr << "Usage: " << "main file_path output_dir" << std::endl;
+    // Basic Argument Check
+    if (argc < 4) {
+        std::cerr << "Usage Error." << std::endl;
+        std::cerr << "Case 1 (Two files): ./main true input_dense.ply input_sparse.ply output_dir" << std::endl;
+        std::cerr << "Case 2 (One file):  ./main false input_dense.ply output_dir" << std::endl;
         return -1;
     }
 
-    const std::string filename = argv[1];
-    std::string output_dir = argv[2];
+    // Parse Flag (First Argument)
+    std::string flag_str = argv[1];
+    bool is_sparse_provided = (flag_str == "true" || flag_str == "1" || flag_str == "yes");
 
-    std::cout << "Input file: " << filename << std::endl;
-    std::cout << "Output directory: " << output_dir << std::endl;
+    // Variables for Paths
+    std::string input_dense_path;
+    std::string input_sparse_path;
+    std::string output_dir;
 
-    if (!output_dir.ends_with("/")) {
-        output_dir += "/";
+    // Parse Remaining Arguments based on Flag
+    if (is_sparse_provided) {
+        // Expecting: [dense] [sparse] [output]
+        if (argc < 5) {
+            std::cerr << "Error: Flag is true, but sparse file argument is missing." << std::endl;
+            return -1;
+        }
+        input_dense_path = argv[2];
+        input_sparse_path = argv[3];
+        output_dir = argv[4];
+    } else {
+        // Expecting: [dense] [output]
+        input_dense_path = argv[2];
+        output_dir = argv[3];
     }
 
-    /// Load Data
-    std::vector<PointVectorPair> sparseCloud;
-    std::vector<PointVectorPair> denseCloud;
+    // Normalize output directory
+    if (output_dir.back() != '/' && output_dir.back() != '\\') output_dir += "/";
 
-    DataLoader loader;
+    std::cout << "=== CICP Configuration ===" << std::endl;
+    std::cout << "Mode: " << (is_sparse_provided ? "Two Files (External Sparse)" : "One File (Synthetic Sparse)") << std::endl;
+    std::cout << "Dense Input: " << input_dense_path << std::endl;
+    if(is_sparse_provided) std::cout << "Sparse Input: " << input_sparse_path << std::endl;
+    std::cout << "Output Dir:  " << output_dir << std::endl;
 
-    if (!loader.load(filename, denseCloud)) {
-        return -1;
+    // Instantiate Pipeline
+    CICP cicpPipeline(VOXEL_SIZE, REGISTRATION_MAX_ITERATIONS, K_NEIGHBORS);
+
+    // Load Data
+    // Always load dense
+    if (!cicpPipeline.loadData(input_dense_path)) return -1;
+
+    if (is_sparse_provided) {
+        // Load the provided sparse cloud
+        if (!cicpPipeline.loadSparseData(input_sparse_path)) return -1;
+        // NOTE: We do NOT run preprocess() here because we assume the 
+        // loaded files are the ones we want to register directly.
+    } else {
+        // No sparse file provided -> Generate it from dense
+        cicpPipeline.preprocess(); 
     }
 
-    /// Copie et prétraitement
-    CloudPreprocessor preprocessor;
-    // Décimation
-    constexpr double decimationFactor = 20; // à ajuster
-    sparseCloud = preprocessor.decimate(denseCloud, decimationFactor);
-    std::cout << "Decimated cloud to " << sparseCloud.size() << " points." << std::endl;
+    // Run Pipeline
+    cicpPipeline.estimateNormals();
+    
+    cicpPipeline.runRegistration(output_dir + "final_aligned.ply");
 
-    // constexpr double noiseStdDev = 0.5; // à ajuster
-    // sparseCloud = preprocessor.add_noise(sparseCloud, noiseStdDev);
-    // std::cout << "Added Gaussian noise : `sd = " << noiseStdDev << "`." << std::endl;
+    std::cout << "CICP Pipeline Complete." << std::endl;
 
-    constexpr double dX = 1.0;
-    constexpr double dY = -2.0;
-    constexpr double dZ = 0.5;
-    sparseCloud = preprocessor.translate(sparseCloud, dX, dY, dZ);
-    std::cout << "Translated cloud by (" << dX << ", " << dY << ", " << dZ << ")." << std::endl;
-
-    constexpr double angleX = 5.0 / 180 * boost::math::constants::pi<double>();
-    constexpr double angleY = -3.0 / 180 * boost::math::constants::pi<double>();
-    constexpr double angleZ = 10.0 / 180 * boost::math::constants::pi<double>();
-
-    sparseCloud = preprocessor.rotate(sparseCloud, angleX, angleY, angleZ);
-    std::cout << "Rotated cloud by (" << angleX << ", " << angleY << ", " << angleZ << ") degrees." << std::endl;
-
-    /// Estimation de normal (� modifier pour ajouter elbow method)
-
-    const int kDense = 5;
-    const int kSparse = 3;
-
-    std::cout << "Computing normals using PCA..." << std::endl;
-
-    CGAL::pca_estimate_normals<CGAL::Parallel_if_available_tag>(
-        denseCloud,
-        kDense,
-        CGAL::parameters::point_map(CGAL::First_of_pair_property_map<PointVectorPair>())
-        .normal_map(CGAL::Second_of_pair_property_map<PointVectorPair>())
-    );
-
-    CGAL::pca_estimate_normals<CGAL::Parallel_if_available_tag>(
-        sparseCloud,
-        kSparse,
-        CGAL::parameters::point_map(CGAL::First_of_pair_property_map<PointVectorPair>())
-        .normal_map(CGAL::Second_of_pair_property_map<PointVectorPair>())
-    );
-
-    std::cout << "Computed " << denseCloud.size() << " normals." << std::endl;
-    std::cout << "Computed " << sparseCloud.size() << " normals." << std::endl;
-
-    // Voxelization
-    double voxelSize = 2; // � ajouter une m�thode de calcul de taille de voxel
-    std::cout << "Voxelizing with size " << voxelSize << "..." << std::endl;
-
-    VoxelGrid vGridDense(voxelSize);
-    VoxelGrid vGridSparse(voxelSize);
-    vGridDense.create(denseCloud);
-    vGridSparse.create(sparseCloud);
-
-    Clustering clusteringDense(denseCloud, vGridDense);
-    Clustering clusteringSparse(sparseCloud, vGridSparse);
-
-    const auto elected_planes_per_voxel_dense = clusteringDense.extract_planes_per_voxel(voxelSize / 100, 20, 4);
-    const auto elected_planes_per_voxel_sparse = clusteringSparse.extract_planes_per_voxel(voxelSize / 100, 20, 4);
-
-    // Debug
-    /*if (!vGrid.grid.empty()) {
-        long firstVoxelId = vGrid.grid.begin()->first;
-        size_t count = vGrid.grid.begin()->second.size();
-        std::cout << "Voxel ID " << firstVoxelId << " contains " << count << " points." << std::endl;
-    }*/
-
-    std::vector<PointVectorPair> elected_planes_dense;
-    for (const auto &planes: elected_planes_per_voxel_dense | std::views::values) {
-        elected_planes_dense.insert(
-            elected_planes_dense.end(),
-            planes.begin(),
-            planes.end()
-        );
-    }
-
-    std::vector<PointVectorPair> elected_planes_sparse;
-    for (const auto &planes: elected_planes_per_voxel_sparse | std::views::values) {
-        elected_planes_sparse.insert(
-            elected_planes_sparse.end(),
-            planes.begin(),
-            planes.end()
-        );
-    }
-
-    loader.export_cloud_with_normals(output_dir + "debug_cloud_dense.ply", denseCloud);
-    loader.export_cloud_with_normals(output_dir + "debug_cloud_sparse.ply", sparseCloud);
-    loader.export_voxel_centers(output_dir + "debug_voxels_dense.ply", vGridDense);
-    loader.export_voxel_centers(output_dir + "debug_voxels_sparse.ply", vGridSparse);
-    loader.export_cloud_with_normals(
-        output_dir + "debug_elected_planes_dense.ply",
-        elected_planes_dense
-    );
-    loader.export_cloud_with_normals(
-        output_dir + "debug_elected_planes_sparse.ply",
-        elected_planes_sparse
+    Visualizer::visualize(
+        cicpPipeline.getDense(),
+        cicpPipeline.getSparseInitial(),
+        cicpPipeline.getSparseFinal()
     );
 
     return 0;

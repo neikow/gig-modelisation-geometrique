@@ -19,4 +19,4 @@ Les Datasets ont été trouvés sur le site du [PCR](https://projet.liris.cnrs.f
   - [Cross Source Registration Benchmark](https://multimediauts.org/3D_data_for_registration/) à extraire dans
   `data/cross-source-dataset` (
   fichiers
-  `.obj`)<br>
+  `.ply`)<br>

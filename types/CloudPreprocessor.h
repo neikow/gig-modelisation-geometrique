@@ -17,7 +17,7 @@ public:
      * @param factor The decimation factor (e.g., 2 means keep around half the points)
      * @return A new decimated point cloud
      */
-    std::vector<PointVectorPair> decimate(const std::vector<PointVectorPair> &cloud, const double factor) {
+     std::vector<PointVectorPair> decimate(const std::vector<PointVectorPair> &cloud, const double factor) {
         std::vector<PointVectorPair> decimatedCloud = {};
         decimatedCloud.reserve(cloud.size() / factor);
 
@@ -35,13 +35,15 @@ public:
         return decimatedCloud;
     }
 
+
+
     /**
      * Add Gaussian noise to each point in the cloud.
      * @param cloud The cloud to add noise to
      * @param stddev The standard deviation of the Gaussian noise
      * @return A new point cloud with added noise
      */
-    std::vector<PointVectorPair> add_noise(const std::vector<PointVectorPair> &cloud, const double stddev) {
+     std::vector<PointVectorPair> add_noise(const std::vector<PointVectorPair> &cloud, const double stddev) {
         std::vector<PointVectorPair> noisyCloud = {};
         noisyCloud.reserve(cloud.size());
 
@@ -68,7 +70,7 @@ public:
      * @param angleZ Rotation angle around the Z axis (in radians)
      * @return A new rotated point cloud
      */
-    std::vector<PointVectorPair> rotate(
+     std::vector<PointVectorPair> rotate(
         const std::vector<PointVectorPair> &cloud,
         const double angleX,
         const double angleY,
@@ -99,7 +101,16 @@ public:
         return rotatedCloud;
     }
 
-    std::vector<PointVectorPair> translate(
+    /**
+     * Translate the given cloud.
+     * @param cloud The cloud to translate
+     * @param transx The x for translation
+     * @param transy The y for translation
+     * @param transz The z for translation
+     * @return A new point cloud translated
+     */
+
+     std::vector<PointVectorPair> translate(
         const std::vector<PointVectorPair> &cloud,
         const double transX,
         const double transY,

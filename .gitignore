@@ -2,6 +2,7 @@
 .idea
 *.iml
 out
+build
 gen
 
 cmake-build-debug
@@ -11,3 +12,4 @@ datasets
 data
 output
 .vs
+*.sh

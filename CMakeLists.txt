@@ -3,10 +3,9 @@ project(gig_modelisation_geometrique)
 
 set(CMAKE_CXX_STANDARD 20)
 
-find_package(CGAL REQUIRED OPTIONAL_COMPONENTS Qt6)
+find_package(CGAL REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_package(PCL 1.3 REQUIRED COMPONENTS io common visualization filters segmentation surface)
-
+find_package(PCL 1.3 REQUIRED COMPONENTS io common visualization filters segmentation surface registration)
 file(
         GLOB cppfiles
         RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
