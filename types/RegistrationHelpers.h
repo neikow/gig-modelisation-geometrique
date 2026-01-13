@@ -8,8 +8,7 @@
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/registration/transformation_estimation_svd.h>
 
-class RegistrationHelpers {
-public:
+namespace RegistrationHelpers {
     /**
      * Perform one alignment step between source and target point clouds.
      * @param source The source point cloud
@@ -17,7 +16,7 @@ public:
      * @param rejection_dist_sq The squared distance threshold for rejecting correspondences
      * @return The estimated transformation matrix (4x4)
      */
-    static Eigen::Matrix4f align_step(
+    inline Eigen::Matrix4f align_step(
         const pcl::PointCloud<pcl::PointXYZ>::Ptr &source,
         const pcl::PointCloud<pcl::PointXYZ>::Ptr &target,
         const double rejection_dist_sq
