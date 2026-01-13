@@ -1,14 +1,10 @@
-#ifndef VOXEL_GRID_H
-#define VOXEL_GRID_H
+#ifndef CICP_VOXEL_GRID_H
+#define CICP_VOXEL_GRID_H
 
 #include <vector>
 #include <map>
-#include <cmath>
-#include <algorithm>
 #include <iostream>
-#include <CGAL/Bbox_3.h>
-#include "CICP_Types.h"
-
+#include "Types.h"
 
 struct VoxelKey {
     long i, j, k;
@@ -20,6 +16,7 @@ struct VoxelKey {
     }
 };
 
+/** Voxel Grid Class */
 class VoxelGrid {
 public:
     std::map<VoxelKey, std::vector<size_t> > grid_indices;
@@ -34,6 +31,9 @@ public:
     explicit VoxelGrid(const double size) : voxel_size(size) {
     }
 
+    /** Create the voxel grid from the given point cloud.
+     * @param cloud The point cloud to voxelize
+     */
     void create(const std::vector<PointVectorPair> &cloud) {
         if (cloud.empty()) return;
 
@@ -69,6 +69,9 @@ public:
         std::cout << "Voxelization complete. Created " << grid_indices.size() << " voxels." << std::endl;
     }
 
+    /** Get the number of voxels in the grid.
+     * @return The number of voxels
+     */
     [[nodiscard]] size_t size() const {
         return grid_indices.size();
     }
