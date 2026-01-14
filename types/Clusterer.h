@@ -65,7 +65,7 @@ namespace Clusterer {
         Vector avg(0, 0, 0);
         for (const auto &n: normals) avg = avg + n;
         const double coherence = std::sqrt(avg.squared_length()) / normals.size();
-        return (coherence < 0.9) ? 2 : 1;
+        return (coherence < 0.98) ? 2 : 1;
     }
 
     /**

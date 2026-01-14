@@ -4,9 +4,10 @@
 #include "types/Visualizer.h"
 
 // Constants
-double VOXEL_SIZE = 0.08;
-int REGISTRATION_MAX_ITERATIONS = 100;
-int K_NEIGHBORS = 10;
+double VOXEL_SIZE = 0.5;
+int REGISTRATION_MAX_ITERATIONS = 250;
+int K_NEIGHBORS = 6;
+int CLUSTER_MAX_ITER = 20;
 
 void print_usage() {
     std::cout << "Usage: ./main input_dense.ply [input_sparse.ply] output_dir" << std::endl;
@@ -56,7 +57,7 @@ int main(int argc, char **argv) {
     std::cout << "Output Dir:  " << output_dir << std::endl;
 
     // Instantiate Pipeline
-    CICP cicp_pipeline(VOXEL_SIZE, REGISTRATION_MAX_ITERATIONS, K_NEIGHBORS);
+    CICP cicp_pipeline(VOXEL_SIZE, REGISTRATION_MAX_ITERATIONS, K_NEIGHBORS, CLUSTER_MAX_ITER);
 
     // Load Data
     // Always load dense

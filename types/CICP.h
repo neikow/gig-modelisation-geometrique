@@ -25,9 +25,11 @@ private:
 
     int registration_max_iterations;
     double voxel_size;
-    int normal_estimation_k_neighbors;
-    double rejection_sq = 25.0;
+    int normal_estimation_k_neighbors; 
     int max_clusterer_iterations = 10;
+    double initial_rejection_sq = 25;
+    double min_rejection_sq = 0.01;
+    double dynamic_threshold_decay = 0.96;
 
 public:
     /** Constructor for CICP Pipeline
@@ -38,11 +40,13 @@ public:
     explicit CICP(
         const double v_size = 2.0,
         const int r_max_iterations = 50,
-        const int normal_estimation_k_neighbors = 10
+        const int normal_estimation_k_neighbors = 10,
+        const int cluster_max_iter = 10
     )
         : voxel_grid(v_size),
           registration_max_iterations(r_max_iterations),
           voxel_size(v_size),
+          max_clusterer_iterations(cluster_max_iter),
           normal_estimation_k_neighbors(normal_estimation_k_neighbors) {
     }
 
@@ -112,12 +116,15 @@ public:
         NormalEstimator::compute(sparse_cloud, normal_estimation_k_neighbors);
     }
 
-    /** Run the CICP registration process.
+
+
+   /** Run the CICP registration process.
      * @param output_path The path to save the registered sparse cloud.
      */
     void run_registration(const std::string &output_path) {
         if (dense_cloud.empty() || sparse_cloud.empty()) return;
         sparse_cloud_initial = sparse_cloud;
+        
         std::cout << "--- Preparing Target (Dense) ---" << std::endl;
         voxel_grid.voxel_size = voxel_size;
         voxel_grid.create(dense_cloud);
@@ -126,19 +133,32 @@ public:
         std::cout << "--- Starting Loop ---" << std::endl;
         Eigen::Matrix4f global_transform = Eigen::Matrix4f::Identity();
 
+        // Use Dynamic Threshold
+        double current_rejection = initial_rejection_sq; 
+
         for (int i = 0; i < registration_max_iterations; ++i) {
             voxel_grid.create(sparse_cloud);
             auto source_reps = Clusterer::process(sparse_cloud, voxel_grid, max_clusterer_iterations);
 
-            Eigen::Matrix4f delta = RegistrationHelpers::align_step(source_reps, target_reps, rejection_sq);
+            // Check Convergence
+            Eigen::Matrix4f delta = RegistrationHelpers::align_step(source_reps, target_reps, current_rejection);
             const double diff = (delta - Eigen::Matrix4f::Identity()).norm();
+            if(i % 10 == 0 || i == registration_max_iterations-1)
+                std::cout << "Iter " << i << " | Delta: " << diff << " | Rej: " << current_rejection << std::endl;
 
-            std::cout << "Iter " << i << " | Delta: " << diff << std::endl;
-            if (diff < 1e-4) break;
+            if (current_rejection <= min_rejection_sq + 1e-9 && diff < 1e-4) {
+                std::cout << "--> Converged." << std::endl;
+                break;
+            }
 
             global_transform = delta * global_transform;
             apply_transform(sparse_cloud, delta);
+
+            // UPDATE DYNAMIC THRESHOLD
+            current_rejection = std::max(current_rejection * dynamic_threshold_decay, min_rejection_sq);
         }
+
+        compute_final_metrics();
         DataLoader::export_cloud_with_normals(output_path, sparse_cloud);
     }
 
@@ -147,6 +167,56 @@ public:
     [[nodiscard]] const std::vector<PointVectorPair> &get_sparse_final() const { return sparse_cloud; }
 
 private:
+
+  void compute_final_metrics() {
+        if (dense_cloud.empty() || sparse_cloud.empty()) return;
+
+        std::cout << "\n--- Computing Final Registration Metrics ---" << std::endl;
+
+        // 1. Convert Dense Cloud to PCL for KD-Tree
+        pcl::PointCloud<pcl::PointXYZ>::Ptr dense_pcl(new pcl::PointCloud<pcl::PointXYZ>);
+        dense_pcl->points.reserve(dense_cloud.size());
+        for (const auto &pair : dense_cloud) {
+            dense_pcl->points.emplace_back(
+                static_cast<float>(pair.first.x()),
+                static_cast<float>(pair.first.y()),
+                static_cast<float>(pair.first.z())
+            );
+        }
+
+        // 2. Build Tree
+        pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+        kdtree.setInputCloud(dense_pcl);
+
+        // 3. Query Every Sparse Point
+        double total_sq_error = 0.0;
+        double total_abs_error = 0.0;
+        std::vector<int> indices(1);
+        std::vector<float> sq_dists(1);
+
+        for (const auto &pair : sparse_cloud) {
+            pcl::PointXYZ query(
+                static_cast<float>(pair.first.x()),
+                static_cast<float>(pair.first.y()),
+                static_cast<float>(pair.first.z())
+            );
+
+            if (kdtree.nearestKSearch(query, 1, indices, sq_dists) > 0) {
+                total_sq_error += sq_dists[0];
+                total_abs_error += std::sqrt(sq_dists[0]);
+            }
+        }
+
+        // 4. Calculate Stats
+        double n = static_cast<double>(sparse_cloud.size());
+        double rmse = std::sqrt(total_sq_error / n);
+        double mean_error = total_abs_error / n;
+
+        std::cout << "  > Final RMSE:          " << rmse << " units" << std::endl;
+        std::cout << "  > Mean Distance Error: " << mean_error << " units" << std::endl;
+        std::cout << "------------------------------------------\n" << std::endl;
+    }
+
     /** Apply the given transformation to the point cloud.
      * @param cloud The cloud to transform
      * @param trans The transformation matrix (4x4)
